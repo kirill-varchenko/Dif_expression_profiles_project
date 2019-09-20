@@ -23,7 +23,7 @@ load_hsa <- function(hsa_name) {
   if ( !(use_local_kegg & file.exists(filehsa)) ) {
     downloadable <- tryCatch(
       expr = {
-        retrieveKGML(hsa_name, organism="hsa", destfile = filehsa, method="internal", quiet=TRUE)
+        retrieveKGML(hsa_name, organism='hsa', destfile = filehsa, method='internal', quiet=TRUE)
         print(paste(hsa_name, 'downloaded to:', filehsa))
         TRUE
       },
@@ -45,7 +45,7 @@ load_hsa <- function(hsa_name) {
   } else {
     print(filehsa)
   }
-  mapkG <- parseKGML2Graph(filehsa, expandGenes=T)
+  mapkG <- parseKGML2Graph(filehsa, expandGenes=T, genesOnly=T)
   return(mapkG)
 }
 
@@ -90,29 +90,26 @@ data(kegg.gs.dise)
 # you can download tast dataframe and read it from your computer (with your own path)
 diff_expressed <- read_excel('gse_16357_001.xlsx') 
 diff_expressed <- diff_expressed$gse16357_entrez
-#diff_expressed <- read_excel("C:/Users/admin/Desktop/experiment.xlsx")
-#diff_expressed <- diff_expressed$gse16357
-diff_expressed <- as.vector(diff_expressed)
-diff_expressed <- diff_expressed[-grep("/+", diff_expressed)]
+diff_expressed <- diff_expressed[-grep('/+', diff_expressed)]
 
 all_KEGG_pathways <- append(kegg.gs, kegg.gs.dise) #browse pathways from KEGG database
 list_intersected_genes <- lapply(all_KEGG_pathways, function(x) intersect(diff_expressed, x)) #intersection between genes in datasets and pathway genes from prev step
-short_list <- list_intersected_genes[lengths(list_intersected_genes) >= 5] #cutoff by min 5 genes in the pathway
+short_list <- list_intersected_genes[lengths(list_intersected_genes) >= min_genes] #cutoff by min 5 genes in the pathway
 pathids <- substr(names(short_list), start=4, stop=8) #extracting IDs
 
-#tests#####
-#very_short_list <- pathids[1:5] #pathways from first to fifth
-#very_short_list <- c('05200') #pathway with ID '05200'
-################
-
 #downloading pathways that contains genes from dataset
+# load('graph_list.RData')
 graph_list <- lapply(pathids, load_hsa)
-ok_graphs <- sapply(graph_list, function(x) typeof(x) == "S4")
-graph_list <- graph_list[ok_graphs]
+graph_list <- graph_list[!is.na(graph_list)]
+#save(graph_list, file='graph_list.RData')
+#ok_graphs <- sapply(graph_list, function(x) typeof(x) == 'S4')
+#graph_list <- graph_list[ok_graphs]
 #mega_graph <- mergeKEGGgraphs(graph_list) #merge all pathways in one big graph
 
 
-#for each graph-pathway in megagraph: change hsa IDs to UniProt IDs (aka 'real names'), find all descendants for each gene in the given pathway, get the list of genes with the largest number of differentially expressed descendants             
+#for each graph-pathway in megagraph: change hsa IDs to UniProt IDs (aka 'real names'), 
+#find all descendants for each gene in the given pathway, get the list of genes 
+#with the largest number of differentially expressed descendants             
 all_mega_ancestorz <- c()
 for (next_graph in graph_list){
   print(next_graph)
@@ -139,7 +136,7 @@ for (next_graph in graph_list){
   diff_expressed_gene_symb <- dict_hsa_to_symb[diff_expressed]
   diff_expressed_gene_symb<-unique(unname(diff_expressed_gene_symb[!is.na(diff_expressed_gene_symb)]))
 
-  forward_edges_list <- vector("list", length(unique_symbol_names))
+  forward_edges_list <- vector('list', length(unique_symbol_names))
   names(forward_edges_list) <- unique_symbol_names
   
   counter <- 0
@@ -183,13 +180,13 @@ for (next_graph in graph_list){
 }
 #all_mega_ancestorz <- unique(all_mega_ancestorz)
 
-sort(table(all_mega_ancestorz)) #get the most abundant genes (within all pathways)
+sorted_table <- sort(table(all_mega_ancestorz), decreasing = T) #get the most abundant genes (within all pathways)
 
 #choose the top 5 most abundant genes from previous resuit (all_mega_ancestorz)
-gene <- c("DDB2", "MAP2K", "GRB2", "GADD45G", "ROCK1", "CALML6")
-freq <- c(9,9,10,11,11,12)
-frec_anz <- data.frame(Gene_name = gene, n_path = freq)
+freq_anz <- as.data.frame(sorted_table[1:5])
+colnames(freq_anz) <- c('Gene_name', 'n_path')
 
-ggplot(frec_anz ,aes(reorder(Gene_name, -n_path),n_path, fill = Gene_name)) + geom_bar(stat = "identity") + ggtitle("Most abundant genes") 
+ggplot(freq_anz, aes(reorder(Gene_name, -n_path), n_path, fill = Gene_name)) + 
+  geom_bar(stat = 'identity') + ggtitle('Most abundant genes') 
 
 
